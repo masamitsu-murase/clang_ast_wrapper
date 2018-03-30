@@ -38,10 +38,14 @@ class Node(object):
     @staticmethod
     def create_node(cursor):
         kind = cursor.kind.name
-        if kind == "BINARY_OPERATOR":
+        if kind == "UNARY_OPERATOR":
+            return UnaryOperatorNode(cursor)
+        elif kind == "BINARY_OPERATOR":
             return BinaryOperatorNode(cursor)
         elif kind == "CSTYLE_CAST_EXPR":
             return CStyleCastExprNode(cursor)
+        elif kind == "CALL_EXPR":
+            return CallExprNode(cursor)
         elif kind == "CONDITIONAL_OPERATOR":
             return ConditionalOperatorNode(cursor)
         elif kind == "DECL_REF_EXPR":
@@ -50,6 +54,8 @@ class Node(object):
             return StringLiteralNode(cursor)
         elif kind == "INTEGER_LITERAL":
             return IntegerLiteralNode(cursor)
+        elif kind == "RETURN_STMT":
+            return ReturnStmtNode(cursor)
         elif kind in {"PAREN_EXPR", "UNEXPOSED_EXPR"}:
             children = tuple(x for x in cursor.get_children())
             if len(children) != 1:
@@ -65,13 +71,31 @@ class DeclRefExprNode(Node):
         self.name = cursor.spelling
         self.type = VarType(cursor.type)
 
+class ReturnStmtNode(Node):
+    def __init__(self, cursor):
+        children = tuple(x for x in cursor.get_children())
+        if len(children) != 1:
+            raise NodeException("RETURN_EXPR should have a single child.")
+        self.body = Node.create_node(children[0])
+
 class CStyleCastExprNode(Node):
     def __init__(self, cursor):
         self.cast_type = VarType(cursor.type)
         children = tuple(x for x in cursor.get_children())
+        if len(children) == 1:
+            self.child = Node.create_node(children[0])
+        elif len(children) == 2 and children[0].kind.name == "TYPE_REF":
+            self.child = Node.create_node(children[1])
+        else:
+            raise NodeException("CStyleCastExpr can have a single child.")
+
+class UnaryOperatorNode(Node):
+    def __init__(self, cursor):
+        children = tuple(x for x in cursor.get_children())
         if len(children) != 1:
-            raise "CStyleCastExpr can have a single child."
-        self.child = Node.create_node(children[0])
+            raise NodeException("UNARY_OPERATOR should have a single operand.")
+        self.operator = next(cursor.get_tokens()).spelling
+        self.operand = Node.create_node(children[0])
 
 class BinaryOperatorNode(Node):
     def __init__(self, cursor):
@@ -134,22 +158,30 @@ class FunctionDeclNode(Node):
         else:
             self.body = None
 
+hoge = None
 class CompoundStmtNode(Node):
     def __init__(self, cursor):
         children = []
         unsupported = {}
         for i in cursor.get_children():
             node_kind = i.kind.name
-            if node_kind == "CALL_EXPR":
-                children.append(CallExprNode(i))
+            # try:
+            #     children.append(Node.create_node(i))
+            # except NodeException:
+            #     unsupported[node_kind] = True
+            if node_kind not in {"UNARY_OPERATOR", "DECL_STMT", "FOR_STMT"}:
+                global hoge
+                hoge = i
+                children.append(Node.create_node(i))
             else:
-                unsupported[node_kind] = True
+                print(node_kind)
         self.children = children
-        print(unsupported.keys())
+        print([x.__class__.__name__ for x in children])
+        if len(unsupported) > 0:
+            print(unsupported.keys())
 
 class CallExprNode(Node):
     def __init__(self, cursor):
-        self.cursor = cursor
         children = tuple(x for x in cursor.get_children())
         # self.function = Node.create_node(children[0])
         self.arguments = tuple(Node.create_node(x) for x in children[1:])
