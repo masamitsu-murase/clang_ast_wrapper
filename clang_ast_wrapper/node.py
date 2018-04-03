@@ -17,6 +17,8 @@ UNEXPOSED_EXPR
 VAR_DECL
 """
 
+import re
+
 class VarType(object):
     def __init__(self, var_type):
         self.type_name = var_type.spelling
@@ -238,7 +240,11 @@ class IntegerLiteralNode(Node):
         tokens = tuple(x.spelling for x in cursor.get_tokens())
         if len(tokens) != 1:
             raise NodeException("literal should have a single token.")
-        self.literal = tokens[0]
+        match_data = re.search(r"^(.+?)[uUlL]+", tokens[0])
+        if match_data:
+            self.literal = int(match_data.group(1), 0)
+        else:
+            self.literal = int(tokens[0], 0)
 
     def __repr__(self):
         return "%s: %s" % (type(self).__name__, self.literal)
