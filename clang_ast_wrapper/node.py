@@ -19,6 +19,8 @@ VAR_DECL
 
 import re
 
+_debug = False
+
 class VarType(object):
     def __init__(self, var_type):
         self.type_name = var_type.spelling
@@ -27,12 +29,14 @@ class VarType(object):
 class NodeException(Exception):
     pass
 
-node = None
 class Node(object):
     def __init__(self, cursor):
-        self.cursor = cursor
+        if _debug:
+            self.cursor = cursor
+        else:
+            self.cursor = None
 
-        self.raw_kind = cursor.kind.name
+        self.kind = cursor.kind.name
         self.parent = None
         self.children = ()
 
@@ -52,7 +56,10 @@ class Node(object):
         return children
 
     def __repr__(self):
-        return "*** Node ***: %s (%s)" % (self.raw_kind, " ".join(x.spelling for x in self.cursor.get_tokens()))
+        if self.cursor:
+            return "Node: %s (%s)" % (self.kind, " ".join(x.spelling for x in self.cursor.get_tokens()))
+        else:
+            return "Node: %s" % (self.kind,)
 
     @staticmethod
     def create_node(cursor):
@@ -147,11 +154,47 @@ class MemberRefExprNode(Node):
 class ForStmtNode(Node):
     def __init__(self, cursor):
         super(ForStmtNode, self).__init__(cursor)
-        children = self.create_children_nodes(cursor, 4)
-        self.init = children[0]
-        self.condition = children[1]
-        self.increment = children[2]
-        self.body = children[3]
+        children = self.create_children_nodes(cursor)
+        if len(children) > 4:
+            raise NodeException("Invalid for statement.")
+
+        index = 0
+        state = "initial"
+        self.init = self.condition = self.increment = None
+        for token_obj in cursor.get_tokens():
+            token = token_obj.spelling
+            if state == "initial":
+                if token == "for":
+                    state = "after_for"
+                else:
+                    raise NodeException("Invalid for statement.")
+            elif state == "after_for":
+                if token == "(":
+                    state = "in_init"
+                else:
+                    raise NodeException("Invalid for statement.")
+            elif state == "in_init":
+                if token == ";":
+                    state = "in_condition"
+                elif self.init is None:
+                    self.init = children[index]
+                    index += 1
+            elif state == "in_condition":
+                if token == ";":
+                    state = "in_increment"
+                elif self.condition is None:
+                    self.condition = children[index]
+                    index += 1
+            elif state == "in_increment":
+                if token == ")":
+                    break
+                elif self.increment is None:
+                    self.increment = children[index]
+                    index += 1
+                    break
+            else:
+                raise NodeException("Invalid state")
+        self.body = children[index]
 
     def __repr__(self):
         return "%s" % (type(self).__name__, )
