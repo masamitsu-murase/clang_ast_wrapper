@@ -78,6 +78,8 @@ class Node(object):
             return DeclStmtNode(cursor)
         elif kind == "FOR_STMT":
             return ForStmtNode(cursor)
+        elif kind == "IF_STMT":
+            return IfStmtNode(cursor)
         elif kind == "CONDITIONAL_OPERATOR":
             return ConditionalOperatorNode(cursor)
         elif kind == "DECL_REF_EXPR":
@@ -199,11 +201,28 @@ class ForStmtNode(Node):
     def __repr__(self):
         return "%s" % (type(self).__name__, )
 
+class IfStmtNode(Node):
+    def __init__(self, cursor):
+        super(IfStmtNode, self).__init__(cursor)
+        children = self.create_children_nodes(cursor)
+        self.condition = children[0]
+        self.body = children[1]
+        if len(children) == 3:
+            self.else_body = children[2]
+        else:
+            self.else_body = None
+
+    def __repr__(self):
+        return "%s" % (type(self).__name__,)
+
 class ReturnStmtNode(Node):
     def __init__(self, cursor):
         super(ReturnStmtNode, self).__init__(cursor)
-        children = self.create_children_nodes(cursor, 1)
-        self.body = children[0]
+        children = self.create_children_nodes(cursor)
+        if len(children) == 1:
+            self.body = children[0]
+        else:
+            self.body = None
 
     def __repr__(self):
         return "%s" % (type(self).__name__, )
