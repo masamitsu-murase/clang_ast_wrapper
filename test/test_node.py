@@ -11,6 +11,37 @@ class TestNode(unittest.TestCase):
         root = cn.TranslationUnitNode(tu.cursor)
         return root
 
+    def test_referrer(self):
+        sample = """
+        void func2(int);
+        void func()
+        {
+            int a;
+            {
+                int a;
+                func2(a);
+            }
+            func2(a);
+            {
+                func2(a);
+            }
+        }
+        """
+        root = self.parse(sample)
+        a_decl0 = root.function_defs[0].body.children[0].children[0]
+        a_decl1 = root.function_defs[0].body.children[1].children[0].children[0]
+        a_referrer0 = root.function_defs[0].body.children[1].children[1].arguments[0]
+        a_referrer1 = root.function_defs[0].body.children[2].arguments[0]
+        a_referrer2 = root.function_defs[0].body.children[3].children[0].arguments[0]
+        self.assertEqual(len(a_decl0.referrers), 2)
+        self.assertIs(a_decl0.referrers[0], a_referrer1)
+        self.assertIs(a_referrer1.var_decl, a_decl0)
+        self.assertIs(a_referrer2.var_decl, a_decl0)
+
+        self.assertEqual(len(a_decl1.referrers), 1)
+        self.assertIs(a_decl1.referrers[0], a_referrer0)
+        self.assertIs(a_referrer0.var_decl, a_decl1)
+
     def test_function_defs(self):
         sample = """
         void func1(void);
