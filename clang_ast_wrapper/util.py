@@ -9,7 +9,8 @@ def is_function_call(node, name, class_name=None):
         else:
             return False
     elif function.kind == "MEMBER_REF_EXPR":
-        if function.type.type_name in {class_name, class_name + " *"} and function.name == name:
+        types = {function.type.type_name, function.type.canonical_type_name}
+        if function.name == name and types.intersection({class_name, class_name + " *"}):
             return True
         else:
             return False
