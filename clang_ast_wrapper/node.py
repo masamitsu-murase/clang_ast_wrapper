@@ -317,6 +317,7 @@ class TranslationUnitNode(Node):
         # TODO
         # support other nodes.
         self.function_decls = tuple(FunctionDeclNode(x) for x in cursor.get_children() if x.kind.name == "FUNCTION_DECL")
+        self.function_defs = tuple(x for x in self.function_decls if x.body is not None)
 
     def __repr__(self):
         return "%s" % (type(self).__name__, )

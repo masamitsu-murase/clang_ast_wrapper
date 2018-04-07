@@ -11,6 +11,20 @@ class TestNode(unittest.TestCase):
         root = cn.TranslationUnitNode(tu.cursor)
         return root
 
+    def test_function_defs(self):
+        sample = """
+        void func1(void);
+        void func2(int a)
+        {
+            func1();
+        }
+        """
+        root = self.parse(sample)
+        self.assertEqual(len(root.function_decls), 2)
+        self.assertEqual(len(root.function_defs), 1)
+        self.assertIs(root.function_decls[1], root.function_defs[0])
+        self.assertEqual(root.function_defs[0].name, "func2")
+
     def test_if_stmt(self):
         sample = """
         int main(int argc, char *argv[])
