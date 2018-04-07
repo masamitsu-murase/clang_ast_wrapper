@@ -19,7 +19,7 @@ VAR_DECL
 
 import re
 
-_debug = False
+_debug = True
 
 class VarType(object):
     def __init__(self, var_type):
@@ -30,15 +30,17 @@ class NodeException(Exception):
     pass
 
 class Node(object):
-    def __init__(self, cursor):
+    def __init__(self, cursor, tu):
         if _debug:
             self.cursor = cursor
         else:
             self.cursor = None
 
+        self.tu = tu
         self.kind = cursor.kind.name
         self.parent = None
         self.children = ()
+        self.offset = cursor.location.offset
 
     def set_parent(self, parent):
         self.parent = parent
@@ -49,7 +51,7 @@ class Node(object):
             child.set_parent(self)
 
     def create_children_nodes(self, cursor, expected_count=None):
-        children = tuple(Node.create_node(x) for x in cursor.get_children())
+        children = tuple(Node.create_node(x, self.tu) for x in cursor.get_children())
         if expected_count is not None and len(children) != expected_count:
             raise NodeException("%s should have %d children." % (type(self).__name__, expected_count))
         self.set_children(children)
@@ -62,64 +64,71 @@ class Node(object):
             return "Node: %s" % (self.kind,)
 
     @staticmethod
-    def create_node(cursor):
+    def create_node(cursor, tu):
         kind = cursor.kind.name
         if kind == "UNARY_OPERATOR":
-            return UnaryOperatorNode(cursor)
+            return UnaryOperatorNode(cursor, tu)
         elif kind == "BINARY_OPERATOR":
-            return BinaryOperatorNode(cursor)
+            return BinaryOperatorNode(cursor, tu)
         elif kind == "VAR_DECL":
-            return VarDeclNode(cursor)
+            return VarDeclNode(cursor, tu)
         elif kind == "CSTYLE_CAST_EXPR":
-            return CStyleCastExprNode(cursor)
+            return CStyleCastExprNode(cursor, tu)
         elif kind == "CALL_EXPR":
-            return CallExprNode(cursor)
+            return CallExprNode(cursor, tu)
         elif kind == "DECL_STMT":
-            return DeclStmtNode(cursor)
+            return DeclStmtNode(cursor, tu)
         elif kind == "FOR_STMT":
-            return ForStmtNode(cursor)
+            return ForStmtNode(cursor, tu)
         elif kind == "IF_STMT":
-            return IfStmtNode(cursor)
+            return IfStmtNode(cursor, tu)
         elif kind == "CONDITIONAL_OPERATOR":
-            return ConditionalOperatorNode(cursor)
+            return ConditionalOperatorNode(cursor, tu)
         elif kind == "DECL_REF_EXPR":
-            return DeclRefExprNode(cursor)
+            return DeclRefExprNode(cursor, tu)
         elif kind == "STRING_LITERAL":
-            return StringLiteralNode(cursor)
+            return StringLiteralNode(cursor, tu)
         elif kind == "INTEGER_LITERAL":
-            return IntegerLiteralNode(cursor)
+            return IntegerLiteralNode(cursor, tu)
         elif kind == "RETURN_STMT":
-            return ReturnStmtNode(cursor)
+            return ReturnStmtNode(cursor, tu)
         elif kind == "PARM_DECL":
-            return ParmDeclNode(cursor)
+            return ParmDeclNode(cursor, tu)
         elif kind == "MEMBER_REF_EXPR":
-            return MemberRefExprNode(cursor)
+            return MemberRefExprNode(cursor, tu)
         elif kind in {"PAREN_EXPR", "UNEXPOSED_EXPR"}:
             children = tuple(x for x in cursor.get_children())
             if len(children) != 1:
                 raise NodeException("PAREN_EXPR/UNEXPOSED_EXPR should have a single child.")
-            return Node.create_node(children[0])
+            return Node.create_node(children[0], tu)
         elif kind == "COMPOUND_STMT":
-            return CompoundStmtNode(cursor)
+            return CompoundStmtNode(cursor, tu)
         else:
             # raise NodeException("Unknown kind: %s" % kind)
-            node = Node(cursor)
+            node = Node(cursor, tu)
             node.create_children_nodes(cursor)
             return node
 
 class DeclRefExprNode(Node):
-    def __init__(self, cursor):
-        super(DeclRefExprNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(DeclRefExprNode, self).__init__(cursor, tu)
         self.create_children_nodes(cursor, 0)
         self.name = cursor.spelling
         self.type = VarType(cursor.type)
+
+        if cursor.get_definition():
+            self.var_decl = tu.find_var_decl(cursor.get_definition().location.offset)
+            if self.var_decl:
+                self.var_decl.add_referrer(self)
+        else:
+            self.var_decl = None
 
     def __repr__(self):
         return "%s: %s::%s" % (type(self).__name__, self.name, self.type.type_name)
 
 class DeclStmtNode(Node):
-    def __init__(self, cursor):
-        super(DeclStmtNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(DeclStmtNode, self).__init__(cursor, tu)
         children = self.create_children_nodes(cursor)
         if not all(isinstance(x, VarDeclNode) for x in children):
             raise NodeException("DeclStmt can contain VarDecl.")
@@ -128,8 +137,10 @@ class DeclStmtNode(Node):
         return "%s" % type(self).__name__
 
 class VarDeclNode(Node):
-    def __init__(self, cursor):
-        super(VarDeclNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(VarDeclNode, self).__init__(cursor, tu)
+        tu.add_var_decl_info(cursor.location.offset, self)
+        self.referrers = []
         children = self.create_children_nodes(cursor)
         self.name = cursor.spelling
         self.type = VarType(cursor.type)
@@ -141,9 +152,12 @@ class VarDeclNode(Node):
     def __repr__(self):
         return "%s: %s::%s" % (type(self).__name__, self.name, self.type.type_name)
 
+    def add_referrer(self, referrer):
+        self.referrers.append(referrer)
+
 class MemberRefExprNode(Node):
-    def __init__(self, cursor):
-        super(MemberRefExprNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(MemberRefExprNode, self).__init__(cursor, tu)
         children = self.create_children_nodes(cursor, 1)
         self.name = cursor.spelling
         self.type = VarType(next(cursor.get_children()).type)
@@ -154,8 +168,8 @@ class MemberRefExprNode(Node):
         return "%s: %s" % (type(self).__name__, self.name)
 
 class ForStmtNode(Node):
-    def __init__(self, cursor):
-        super(ForStmtNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(ForStmtNode, self).__init__(cursor, tu)
         children = self.create_children_nodes(cursor)
         if len(children) > 4:
             raise NodeException("Invalid for statement.")
@@ -202,8 +216,8 @@ class ForStmtNode(Node):
         return "%s" % (type(self).__name__, )
 
 class IfStmtNode(Node):
-    def __init__(self, cursor):
-        super(IfStmtNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(IfStmtNode, self).__init__(cursor, tu)
         children = self.create_children_nodes(cursor)
         self.condition = children[0]
         self.body = children[1]
@@ -216,8 +230,8 @@ class IfStmtNode(Node):
         return "%s" % (type(self).__name__,)
 
 class ReturnStmtNode(Node):
-    def __init__(self, cursor):
-        super(ReturnStmtNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(ReturnStmtNode, self).__init__(cursor, tu)
         children = self.create_children_nodes(cursor)
         if len(children) == 1:
             self.body = children[0]
@@ -228,8 +242,8 @@ class ReturnStmtNode(Node):
         return "%s" % (type(self).__name__, )
 
 class CStyleCastExprNode(Node):
-    def __init__(self, cursor):
-        super(CStyleCastExprNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(CStyleCastExprNode, self).__init__(cursor, tu)
         self.cast_type = VarType(cursor.type)
         children = tuple(x for x in cursor.get_children())
         if len(children) == 1:
@@ -244,8 +258,8 @@ class CStyleCastExprNode(Node):
         return "%s: %s" % (type(self).__name__, self.cast_type.type_name)
 
 class UnaryOperatorNode(Node):
-    def __init__(self, cursor):
-        super(UnaryOperatorNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(UnaryOperatorNode, self).__init__(cursor, tu)
         children = self.create_children_nodes(cursor, 1)
         self.operator = next(cursor.get_tokens()).spelling
         self.operand = children[0]
@@ -254,8 +268,8 @@ class UnaryOperatorNode(Node):
         return "%s: %s" % (type(self).__name__, self.operator)
 
 class BinaryOperatorNode(Node):
-    def __init__(self, cursor):
-        super(BinaryOperatorNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(BinaryOperatorNode, self).__init__(cursor, tu)
         children = self.create_children_nodes(cursor, 2)
         raw_children = tuple(x for x in cursor.get_children())
         tokens = tuple(x.spelling for x in cursor.get_tokens())
@@ -269,8 +283,8 @@ class BinaryOperatorNode(Node):
         return "%s: %s" % (type(self).__name__, self.operator)
 
 class ConditionalOperatorNode(Node):
-    def __init__(self, cursor):
-        super(ConditionalOperatorNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(ConditionalOperatorNode, self).__init__(cursor, tu)
         children = self.create_children_nodes(cursor, 3)
         raw_children = tuple(x for x in cursor.get_children())
         tokens = tuple(x.spelling for x in cursor.get_tokens())
@@ -284,8 +298,8 @@ class ConditionalOperatorNode(Node):
         return "%s: %s" % (type(self).__name__, self.operator)
 
 class StringLiteralNode(Node):
-    def __init__(self, cursor):
-        super(StringLiteralNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(StringLiteralNode, self).__init__(cursor, tu)
         self.create_children_nodes(cursor, 0)
         tokens = tuple(x.spelling for x in cursor.get_tokens())
         if len(tokens) != 1:
@@ -296,8 +310,8 @@ class StringLiteralNode(Node):
         return "%s: %s" % (type(self).__name__, self.literal)
 
 class IntegerLiteralNode(Node):
-    def __init__(self, cursor):
-        super(IntegerLiteralNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(IntegerLiteralNode, self).__init__(cursor, tu)
         self.create_children_nodes(cursor, 0)
         tokens = tuple(x.spelling for x in cursor.get_tokens())
         if len(tokens) != 1:
@@ -313,18 +327,27 @@ class IntegerLiteralNode(Node):
 
 class TranslationUnitNode(Node):
     def __init__(self, cursor):
-        super(TranslationUnitNode, self).__init__(cursor)
+        super(TranslationUnitNode, self).__init__(cursor, self)
+
+        self.var_decl_info = {}
+
         # TODO
         # support other nodes.
-        self.function_decls = tuple(FunctionDeclNode(x) for x in cursor.get_children() if x.kind.name == "FUNCTION_DECL")
+        self.function_decls = tuple(FunctionDeclNode(x, self) for x in cursor.get_children() if x.kind.name == "FUNCTION_DECL")
         self.function_defs = tuple(x for x in self.function_decls if x.body is not None)
 
     def __repr__(self):
         return "%s" % (type(self).__name__, )
 
+    def add_var_decl_info(self, offset, var_decl):
+        self.var_decl_info[offset] = var_decl
+
+    def find_var_decl(self, offset):
+        return self.var_decl_info.get(offset, None)
+
 class ParmDeclNode(Node):
-    def __init__(self, cursor):
-        super(ParmDeclNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(ParmDeclNode, self).__init__(cursor, tu)
         self.create_children_nodes(cursor)
         self.name = cursor.spelling
         self.type = VarType(cursor.type)
@@ -333,8 +356,8 @@ class ParmDeclNode(Node):
         return "%s: %s::%s" % (type(self).__name__, self.name, self.type.type_name)
 
 class FunctionDeclNode(Node):
-    def __init__(self, cursor):
-        super(FunctionDeclNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(FunctionDeclNode, self).__init__(cursor, tu)
         children = self.create_children_nodes(cursor)
         self.name = cursor.spelling
         self.result_type = VarType(cursor.result_type)
@@ -352,16 +375,16 @@ class FunctionDeclNode(Node):
 
 hoge = None
 class CompoundStmtNode(Node):
-    def __init__(self, cursor):
-        super(CompoundStmtNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(CompoundStmtNode, self).__init__(cursor, tu)
         children = self.create_children_nodes(cursor)
 
     def __repr__(self):
         return "%s" % (type(self).__name__, )
 
 class CallExprNode(Node):
-    def __init__(self, cursor):
-        super(CallExprNode, self).__init__(cursor)
+    def __init__(self, cursor, tu):
+        super(CallExprNode, self).__init__(cursor, tu)
         children = self.create_children_nodes(cursor)
         self.function = children[0]
         self.arguments = children[1:]
