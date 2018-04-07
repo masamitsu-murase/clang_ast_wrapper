@@ -1,12 +1,14 @@
 @echo off
 
-ruby test/download.rb python python.exe
+set RUBY=C:\Ruby23\bin\ruby.exe
+
+%RUBY% test/download.rb python python.exe
 if ERRORLEVEL 1 (
     echo download python error
     exit /b 1
 )
 
-ruby test/download.rb libclang libclang.dll
+%RUBY% test/download.rb libclang libclang.dll
 if ERRORLEVEL 1 (
     echo download libclang error
     exit /b 1
