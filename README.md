@@ -1,4 +1,6 @@
 
+[![Build status](https://ci.appveyor.com/api/projects/status/1ph6i6fu6sg8vd5u?svg=true)](https://ci.appveyor.com/project/masamitsu-murase/clang-ast-wrapper)
+
 # clang_ast_wrapper
 
 This is a wrapper library for clang.cindex of libclang.dll.
