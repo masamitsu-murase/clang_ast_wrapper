@@ -1,3 +1,4 @@
+@echo off
 
 ruby test/download.rb python python.exe
 if ERRORLEVEL 1 (
