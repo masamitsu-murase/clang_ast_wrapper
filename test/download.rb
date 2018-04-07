@@ -41,7 +41,7 @@ def main_python(python_exe_name)
 end
 
 def main_libclang(libclang_dll_name)
-    download(python_exe_name, "https://api.github.com/repos/masamitsu-murase/clang/releases/latest")
+    download(libclang_dll_name, "https://api.github.com/repos/masamitsu-murase/clang/releases/latest")
 end
 
 case ARGV[0]
