@@ -59,6 +59,89 @@ class TestNode(unittest.TestCase):
         root = self.parse(sample)
         self.assertEqual([x.name for x in root.global_var_defs], ["global1", "global2", "global3", "global4"])
 
+    def check_for_stmt(self, source, init, condition, increment):
+        root = self.parse(source)
+        if init:
+            self.assertTrue(root.function_defs[0].body.children[1].init)
+        else:
+            self.assertFalse(root.function_defs[0].body.children[1].init)
+        if condition:
+            self.assertTrue(root.function_defs[0].body.children[1].condition)
+        else:
+            self.assertFalse(root.function_defs[0].body.children[1].condition)
+        if increment:
+            self.assertTrue(root.function_defs[0].body.children[1].increment)
+        else:
+            self.assertFalse(root.function_defs[0].body.children[1].increment)
+        self.assertTrue(root.function_defs[0].body.children[1].body)
+
+    def test_for_stmt(self):
+        sample = """
+        void func1()
+        {
+            int i;
+            for (i=0; i<5; i++) {
+                i += 2;
+            }
+        }
+        """
+        self.check_for_stmt(sample, True, True, True)
+
+        sample = """
+        void func1()
+        {
+            int i;
+            for (; i<5; i++) {
+                i += 2;
+            }
+        }
+        """
+        self.check_for_stmt(sample, False, True, True)
+
+        sample = """
+        void func1()
+        {
+            int i;
+            for (i=0; ; i++) {
+                i += 2;
+            }
+        }
+        """
+        self.check_for_stmt(sample, True, False, True)
+
+        sample = """
+        void func1()
+        {
+            int i;
+            for (i=0; i<5;) {
+                i += 2;
+            }
+        }
+        """
+        self.check_for_stmt(sample, True, True, False)
+
+        sample = """
+        void func1()
+        {
+            int i;
+            for (; i<5;) {
+                i += 2;
+            }
+        }
+        """
+        self.check_for_stmt(sample, False, True, False)
+
+        sample = """
+        void func1()
+        {
+            int i = 0;
+            for (; ; i++) {
+                i += 2;
+            }
+        }
+        """
+        self.check_for_stmt(sample, False, False, True)
+
     def test_function_defs(self):
         sample = """
         void func1(void);
