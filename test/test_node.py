@@ -42,6 +42,23 @@ class TestNode(unittest.TestCase):
         self.assertIs(a_decl1.referrers[0], a_referrer0)
         self.assertIs(a_referrer0.var_decl, a_decl1)
 
+    def test_is_constant_value(self):
+        pass
+
+    def test_global_variable(self):
+        sample = """
+        static int global1 = 0;
+        char global2, global3;
+        extern int not_global;
+        void func1()
+        {
+            unsigned int local0 = 0;
+        }
+        int global4 = 0;
+        """
+        root = self.parse(sample)
+        self.assertEqual([x.name for x in root.global_var_defs], ["global1", "global2", "global3", "global4"])
+
     def test_function_defs(self):
         sample = """
         void func1(void);
@@ -67,7 +84,7 @@ class TestNode(unittest.TestCase):
         }
         """
         root = self.parse(sample)
-        if_node = root.function_decls[0].body.children[0]
+        if_node = root.function_defs[0].body.children[0]
         self.assertTrue(if_node)
         self.assertIsNone(if_node.else_body)
 
@@ -83,6 +100,6 @@ class TestNode(unittest.TestCase):
         }
         """
         root = self.parse(sample)
-        if_node = root.function_decls[0].body.children[0]
+        if_node = root.function_defs[0].body.children[0]
         self.assertTrue(if_node)
         self.assertTrue(if_node.else_body)

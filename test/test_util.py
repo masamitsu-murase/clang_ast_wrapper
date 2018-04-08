@@ -12,7 +12,7 @@ class TestUtil(unittest.TestCase):
         root = cn.TranslationUnitNode(tu.cursor)
         return root
 
-    def test_if_stmt(self):
+    def test_is_function_call(self):
         sample = """
         void puts(const char *);
         int main(int argc, char *argv[])

@@ -78,6 +78,8 @@ class Node(object):
             return CallExprNode(cursor, tu)
         elif kind == "DECL_STMT":
             return DeclStmtNode(cursor, tu)
+        elif kind == "FUNCTION_DECL":
+            return FunctionDeclNode(cursor, tu)
         elif kind == "FOR_STMT":
             return ForStmtNode(cursor, tu)
         elif kind == "IF_STMT":
@@ -148,12 +150,17 @@ class VarDeclNode(Node):
             self.initial_value = children[-1]
         else:
             self.initial_value = None
+        self.is_global = False
+        self.storage_class = cursor.storage_class.name
 
     def __repr__(self):
         return "%s: %s::%s" % (type(self).__name__, self.name, self.type.type_name)
 
     def add_referrer(self, referrer):
         self.referrers.append(referrer)
+
+    def set_global(self, flag):
+        self.is_global = flag
 
 class MemberRefExprNode(Node):
     def __init__(self, cursor, tu):
@@ -247,9 +254,9 @@ class CStyleCastExprNode(Node):
         self.cast_type = VarType(cursor.type)
         children = tuple(x for x in cursor.get_children())
         if len(children) == 1:
-            self.child = Node.create_node(children[0])
+            self.child = Node.create_node(children[0], tu)
         elif len(children) == 2 and children[0].kind.name == "TYPE_REF":
-            self.child = Node.create_node(children[1])
+            self.child = Node.create_node(children[1], tu)
         else:
             raise NodeException("CStyleCastExpr can have a single child.")
         self.set_children((self.child,))
@@ -328,13 +335,16 @@ class IntegerLiteralNode(Node):
 class TranslationUnitNode(Node):
     def __init__(self, cursor):
         super(TranslationUnitNode, self).__init__(cursor, self)
-
         self.var_decl_info = {}
+
+        self.global_var_defs = tuple(VarDeclNode(x, self) for x in cursor.get_children() if x.kind.name == "VAR_DECL" and x.storage_class.name in {"NONE", "STATIC"})
+        for var in self.global_var_defs:
+            var.set_global(True)
+        self.function_decls = tuple(FunctionDeclNode(x, self) for x in cursor.get_children() if x.kind.name == "FUNCTION_DECL")
+        self.function_defs = tuple(x for x in self.function_decls if x.body is not None)
 
         # TODO
         # support other nodes.
-        self.function_decls = tuple(FunctionDeclNode(x, self) for x in cursor.get_children() if x.kind.name == "FUNCTION_DECL")
-        self.function_defs = tuple(x for x in self.function_decls if x.body is not None)
 
     def __repr__(self):
         return "%s" % (type(self).__name__, )
