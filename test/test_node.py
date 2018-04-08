@@ -57,7 +57,7 @@ class TestNode(unittest.TestCase):
         int global4 = 0;
         """
         root = self.parse(sample)
-        self.assertEqual([x.name for x in root.global_var_decls], ["global1", "global2", "global3", "global4"])
+        self.assertEqual([x.name for x in root.global_var_defs], ["global1", "global2", "global3", "global4"])
 
     def test_function_defs(self):
         sample = """

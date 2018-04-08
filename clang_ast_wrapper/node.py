@@ -337,8 +337,8 @@ class TranslationUnitNode(Node):
         super(TranslationUnitNode, self).__init__(cursor, self)
         self.var_decl_info = {}
 
-        self.global_var_decls = tuple(VarDeclNode(x, self) for x in cursor.get_children() if x.kind.name == "VAR_DECL" and x.storage_class.name in {"NONE", "STATIC"})
-        for var in self.global_var_decls:
+        self.global_var_defs = tuple(VarDeclNode(x, self) for x in cursor.get_children() if x.kind.name == "VAR_DECL" and x.storage_class.name in {"NONE", "STATIC"})
+        for var in self.global_var_defs:
             var.set_global(True)
         self.function_decls = tuple(FunctionDeclNode(x, self) for x in cursor.get_children() if x.kind.name == "FUNCTION_DECL")
         self.function_defs = tuple(x for x in self.function_decls if x.body is not None)
